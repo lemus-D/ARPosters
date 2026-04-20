@@ -1,0 +1,7 @@
+{
+  "mindSrc": "./targets.mind",
+  "maxTrack": 1,
+  "filterMinCF": 1e-11,
+  "warmupTolerance": 1,
+  "pairings": []
+}

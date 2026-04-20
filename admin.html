@@ -1,0 +1,188 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR Poster &mdash; Admin Dashboard</title>
+    <link rel="stylesheet" href="./css/admin.css" />
+
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>AR Poster</h1>
+        <p>Dashboard</p>
+      </div>
+      <nav class="topbar-actions">
+        <button id="btn-load-config" class="btn btn-ghost" type="button">Load existing config.json</button>
+        <span id="dir-status" class="dir-status" title="No repo folder connected">&#9679; Not connected</span>
+        <button id="btn-open-viewer" class="btn btn-ghost" type="button">Open viewer</button>
+        <button id="btn-save" class="btn btn-primary" type="button" title="Chrome/Edge: picks AR_Poster folder and writes files directly. Other browsers: downloads a zip.">Save &amp; Generate Viewer</button>
+      </nav>
+    </header>
+
+    <div id="status-bar" class="status-bar hidden"></div>
+
+    <main class="layout">
+      <section class="panel" id="panel-targets">
+        <header class="panel-header">
+          <h2>1. Targets</h2>
+          <div class="panel-actions">
+            <label class="btn btn-secondary">
+              <input id="mind-input" type="file" accept=".mind" hidden />
+              Load targets.mind
+            </label>
+            <label class="btn btn-ghost" id="btn-ref-images" title="Upload your original target photos in the same order you compiled them">
+              <input id="ref-input" type="file" accept="image/*" multiple hidden />
+              Load reference images
+            </label>
+          </div>
+        </header>
+        <p class="hint">
+          Compile your poster images at
+          <a href="https://hiukim.github.io/mind-ar-js-doc/tools/compile" target="_blank" rel="noopener">hiukim.github.io/mind-ar-js-doc/tools/compile</a>,
+          then load the <code>targets.mind</code> file here. Numbered previews will appear below so you can pair them with display assets.
+        </p>
+        <div id="targets-grid" class="grid grid-targets">
+          <div class="empty-state">No targets loaded yet.</div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-assets">
+        <header class="panel-header">
+          <h2>2. Display assets</h2>
+          <div class="panel-actions">
+            <label class="btn btn-secondary">
+              <input id="asset-input" type="file" accept="image/*,video/mp4,.mp4,.webm,.glb,.gltf" multiple hidden />
+              Upload files
+            </label>
+          </div>
+        </header>
+        <p class="hint" id="assets-hint">
+          Images, videos (mp4/webm) and 3D models (glb/gltf) can be paired with targets. Files are staged in the browser until you save.
+        </p>
+        <div id="assets-grid" class="grid grid-assets">
+          <div class="empty-state">No assets staged yet.</div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-pairings">
+        <header class="panel-header">
+          <h2>3. Pairings &amp; transforms</h2>
+        </header>
+        <p class="hint">
+          Drop an asset onto a target card (or use the selector on each card) to create a pairing. Tune placement per pairing below.
+        </p>
+        <div id="pairings-list" class="pairings-list">
+          <div class="empty-state">Load targets and assets first, then pair them above.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Scene options:</span>
+      <label>maxTrack <input type="number" id="opt-maxTrack" min="1" max="5" step="1" value="1" /></label>
+      <label>filterMinCF <input type="number" id="opt-filterMinCF" step="0.0000000001" value="1e-11" /></label>
+      <label>warmupTolerance <input type="number" id="opt-warmupTolerance" min="0" max="10" step="1" value="1" /></label>
+    </footer>
+
+    <template id="tpl-target-card">
+      <div class="card target-card" data-target-index="">
+        <div class="target-thumb">
+          <canvas></canvas>
+        </div>
+        <div class="target-meta">
+          <span class="target-label">Target #<span class="target-idx"></span></span>
+          <select class="target-pair-select">
+            <option value="">&mdash; unpaired &mdash;</option>
+          </select>
+        </div>
+      </div>
+    </template>
+
+    <template id="tpl-asset-card">
+      <div class="card asset-card" draggable="true" data-asset-id="">
+        <div class="asset-thumb"></div>
+        <div class="asset-meta">
+          <span class="asset-name"></span>
+          <span class="asset-type"></span>
+        </div>
+      </div>
+    </template>
+
+    <template id="tpl-pairing-row">
+      <div class="pairing-row" data-target-index="">
+        <div class="pairing-head">
+          <div class="pairing-target">
+            <canvas></canvas>
+            <span class="pairing-target-label">Target #<span class="pairing-target-idx"></span></span>
+          </div>
+          <div class="pairing-asset">
+            <span class="pairing-asset-name"></span>
+            <select class="pairing-type">
+              <option value="image">Image</option>
+              <option value="video">Video</option>
+              <option value="model">3D model</option>
+            </select>
+          </div>
+          <button class="btn btn-ghost btn-small pairing-remove" type="button">Remove</button>
+        </div>
+
+        <div class="pairing-body">
+          <fieldset class="transform-group">
+            <legend>Position</legend>
+            <label>x <input type="number" step="0.01" class="t-pos-x" value="0" /></label>
+            <label>y <input type="number" step="0.01" class="t-pos-y" value="0" /></label>
+            <label>z <input type="number" step="0.01" class="t-pos-z" value="0" /></label>
+          </fieldset>
+
+          <fieldset class="transform-group">
+            <legend>Rotation (deg)</legend>
+            <label>x <input type="number" step="1" class="t-rot-x" value="0" /></label>
+            <label>y <input type="number" step="1" class="t-rot-y" value="0" /></label>
+            <label>z <input type="number" step="1" class="t-rot-z" value="0" /></label>
+          </fieldset>
+
+          <fieldset class="transform-group">
+            <legend>Scale</legend>
+            <label>x <input type="number" step="0.05" class="t-scl-x" value="1" /></label>
+            <label>y <input type="number" step="0.05" class="t-scl-y" value="1" /></label>
+            <label>z <input type="number" step="0.05" class="t-scl-z" value="1" /></label>
+          </fieldset>
+
+          <fieldset class="transform-group plane-only">
+            <legend>Plane size</legend>
+            <label>width <input type="number" step="0.05" class="t-plane-w" value="1" min="0.01" /></label>
+            <label>height <input type="number" step="0.05" class="t-plane-h" value="1" min="0.01" /></label>
+          </fieldset>
+
+          <fieldset class="transform-group flags image-only">
+            <legend>Image options</legend>
+            <label><input type="checkbox" class="t-tap" checked /> Tap to enlarge</label>
+          </fieldset>
+
+          <fieldset class="transform-group flags video-only">
+            <legend>Video options</legend>
+            <label><input type="checkbox" class="t-loop" checked /> Loop</label>
+            <label><input type="checkbox" class="t-autoplay" checked /> Autoplay</label>
+            <label><input type="checkbox" class="t-muted" checked /> Muted</label>
+          </fieldset>
+        </div>
+
+        <div class="pairing-preview">
+          <div class="preview-stage">
+            <img class="preview-target" alt="" />
+            <div class="preview-overlay"></div>
+          </div>
+          <span class="preview-caption">Mini preview (plane size relative to target)</span>
+        </div>
+      </div>
+    </template>
+
+    <script src="./js/admin.js"></script>
+  </body>
+</html>
