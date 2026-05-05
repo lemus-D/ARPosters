@@ -1,5 +1,4 @@
 # Ignore uploaded user assets (keep folder structure via .gitkeep)
-assets/images/*
 assets/videos/*
 assets/models/*
 !assets/images/.gitkeep
