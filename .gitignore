@@ -1,9 +1,1 @@
-# Ignore uploaded user assets (keep folder structure via .gitkeep)
-assets/videos/*
-assets/models/*
-!assets/images/.gitkeep
-!assets/videos/.gitkeep
-!assets/models/.gitkeep
 
-# Ignore compiled targets file — users supply their own
-targets.mind
