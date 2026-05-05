@@ -9,6 +9,8 @@
     targets: [],          // [{ index, width, height, dataUrl }]
     assets: [],           // [{ id, name, type, file, relPath, objectUrl }]
     pairings: new Map(),  // targetIndex -> pairing object
+    sourceImages: [],     // [{ name, file, dataUrl, img: HTMLImageElement }]
+    compiledMind: null,   // { arrayBuffer, blob } once compileImageTargets finishes
     dirHandle: null,
     sceneOptions: {
       mindSrc: './targets.mind',
@@ -26,6 +28,12 @@
 
   const el = {
     mindInput: document.getElementById('mind-input'),
+    srcInput: document.getElementById('src-input'),
+    btnCompile: document.getElementById('btn-compile'),
+    btnDownloadMind: document.getElementById('btn-download-mind'),
+    compileProgress: document.getElementById('compile-progress'),
+    compileProgressBar: document.querySelector('#compile-progress .compile-progress-bar > span'),
+    compileProgressLabel: document.querySelector('#compile-progress .compile-progress-label'),
     assetInput: document.getElementById('asset-input'),
     targetsGrid: document.getElementById('targets-grid'),
     assetsGrid: document.getElementById('assets-grid'),
@@ -170,6 +178,166 @@
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // In-app target compiler (Panel 1, primary path)
+  // Uses MINDAR.IMAGE.Compiler.compileImageTargets() locally in the browser —
+  // no upload to mind-ar-js-doc/tools/compile required.
+  // ---------------------------------------------------------------------------
+
+  function setCompileProgress(percent, label) {
+    if (!el.compileProgress) return;
+    if (percent == null) {
+      el.compileProgress.classList.add('hidden');
+      return;
+    }
+    el.compileProgress.classList.remove('hidden');
+    const p = Math.max(0, Math.min(100, Math.round(percent)));
+    if (el.compileProgressBar) el.compileProgressBar.style.width = p + '%';
+    if (el.compileProgressLabel) el.compileProgressLabel.textContent = label || ('Compiling\u2026 ' + p + '%');
+  }
+
+  function updateCompileButtons() {
+    if (el.btnCompile) el.btnCompile.disabled = state.sourceImages.length === 0;
+    if (el.btnDownloadMind) el.btnDownloadMind.disabled = !state.compiledMind;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadHtmlImage(src) {
+    return new Promise(function (resolve, reject) {
+      const img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error('Could not decode image')); };
+      img.src = src;
+    });
+  }
+
+  async function stageSourceImages(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setStatus('Reading ' + files.length + ' image(s)\u2026');
+    try {
+      for (const file of files) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const img = await loadHtmlImage(dataUrl);
+        state.sourceImages.push({
+          name: file.name,
+          file: file,
+          dataUrl: dataUrl,
+          img: img
+        });
+      }
+      // Show pending preview cards immediately so the user can see what they staged.
+      // Each staged image takes the next available index but we mark them pending
+      // until compile finishes (no width/height from MindAR yet).
+      const previousTargets = state.targets.slice();
+      state.targets = state.sourceImages.map(function (s, i) {
+        const previous = previousTargets[i];
+        return {
+          index: i,
+          width: s.img.naturalWidth,
+          height: s.img.naturalHeight,
+          dataUrl: s.dataUrl,
+          pending: !state.compiledMind,
+          name: s.name,
+          // preserve any pairings already wired to this index
+          _carryDataUrl: previous && previous.dataUrl
+        };
+      });
+      // Compiled state is invalidated by adding new source images
+      state.compiledMind = null;
+      updateCompileButtons();
+      renderTargets();
+      renderPairings();
+      setStatus('Staged ' + state.sourceImages.length + ' image(s). Click "Compile targets.mind" to generate.', 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not stage images: ' + err.message, 'err');
+    }
+  }
+
+  async function compileSourceImages() {
+    const Compiler = getMindARCompiler();
+    if (!Compiler) {
+      console.error('[admin] window.MINDAR dump:', window.MINDAR);
+      setStatus('MindAR Compiler not found. Check browser console for details.', 'err');
+      return;
+    }
+    if (!state.sourceImages.length) {
+      setStatus('Stage at least one target image first.', 'err');
+      return;
+    }
+
+    if (el.btnCompile) el.btnCompile.disabled = true;
+    setCompileProgress(0, 'Compiling\u2026 0%');
+    setStatus('Compiling ' + state.sourceImages.length + ' target(s) locally\u2026');
+
+    try {
+      const compiler = new Compiler();
+      const images = state.sourceImages.map(function (s) { return s.img; });
+
+      await compiler.compileImageTargets(images, function (progress) {
+        // MindAR reports progress in 0..100 (sometimes >100 for multi-target jobs)
+        const p = typeof progress === 'number' ? progress : 0;
+        setCompileProgress(p);
+      });
+
+      const buffer = await compiler.exportData();
+      const blob = new Blob([buffer], { type: 'application/octet-stream' });
+      state.compiledMind = { arrayBuffer: buffer, blob: blob };
+
+      // Re-import via the same code path loadMindFile uses, so state.targets has
+      // the official width/height/index that MindAR would publish at runtime.
+      await compiler.importData(buffer);
+      const dataList = compiler.data || compiler.dataList || [];
+
+      const compiledTargets = [];
+      for (let i = 0; i < dataList.length; i++) {
+        const ti = dataList[i].targetImage || {};
+        const src = state.sourceImages[i];
+        compiledTargets.push({
+          index: i,
+          width: ti.width || (src && src.img ? src.img.naturalWidth : 0),
+          height: ti.height || (src && src.img ? src.img.naturalHeight : 0),
+          dataUrl: src ? src.dataUrl : '',
+          pending: false,
+          name: src ? src.name : ''
+        });
+      }
+      state.targets = compiledTargets;
+
+      setCompileProgress(100, 'Done');
+      setTimeout(function () { setCompileProgress(null); }, 800);
+
+      updateCompileButtons();
+      renderTargets();
+      renderPairings();
+      setStatus('Compiled ' + state.targets.length + ' target(s). Click "Download targets.mind" or "Save & Generate Viewer".', 'ok');
+    } catch (err) {
+      console.error(err);
+      setCompileProgress(null);
+      setStatus('Compile failed: ' + err.message, 'err');
+    } finally {
+      updateCompileButtons();
+    }
+  }
+
+  function downloadCompiledMind() {
+    if (!state.compiledMind) {
+      setStatus('Nothing to download yet \u2014 compile first.', 'err');
+      return;
+    }
+    downloadBlob(state.compiledMind.blob, 'targets.mind');
+    setStatus('Downloaded targets.mind. Drop it next to index.html in your AR_Poster folder.', 'ok');
+  }
+
   async function loadMindFile(file) {
     const Compiler = getMindARCompiler();
     if (!Compiler) {
@@ -199,6 +367,13 @@
           dataUrl: savedDataUrls[i] || ''
         });
       }
+
+      // Loading an external .mind invalidates any in-app staged source images:
+      // they no longer correspond to the active target indices. Clear them so
+      // users don't get confused state.
+      state.sourceImages = [];
+      state.compiledMind = null;
+      updateCompileButtons();
 
       renderTargets();
       renderPairings();
@@ -789,27 +964,29 @@ ${entitiesHtml}    </a-scene>
     // Collect any newly-uploaded assets that aren't on disk yet
     const newAssets = state.assets.filter(function (a) { return a.file && !a.written; });
     const hasNewAssets = newAssets.length > 0;
+    const hasCompiledMind = !!state.compiledMind;
 
-    if (!hasNewAssets) {
-      // No new assets — just download the two key files directly (no zip needed)
+    if (!hasNewAssets && !hasCompiledMind) {
+      // Nothing binary to ship — just the two text files
       downloadBlob(new Blob([viewerHtml], { type: 'text/html' }), 'index.html');
       downloadBlob(new Blob([json], { type: 'application/json' }), 'config.json');
       setStatus('Downloaded index.html + config.json \u2014 drag both into your AR_Poster folder and refresh.', 'ok');
       return;
     }
 
-    // New assets need to go to disk too — bundle everything into a zip
+    // Binary content present (new assets and/or freshly compiled .mind) — zip it.
     if (typeof JSZip === 'undefined') {
-      // JSZip failed to load — fall back to the two individual files
       downloadBlob(new Blob([viewerHtml], { type: 'text/html' }), 'index.html');
       downloadBlob(new Blob([json], { type: 'application/json' }), 'config.json');
-      setStatus('Downloaded index.html + config.json. Place new assets manually under AR_Poster/assets/.', 'ok');
+      if (hasCompiledMind) downloadBlob(state.compiledMind.blob, 'targets.mind');
+      setStatus('Downloaded files individually (JSZip unavailable). Place them next to index.html in AR_Poster/.', 'ok');
       return;
     }
 
     const zip = new JSZip();
     zip.file('index.html', viewerHtml);
     zip.file('config.json', json);
+    if (hasCompiledMind) zip.file('targets.mind', state.compiledMind.arrayBuffer);
     for (const a of newAssets) {
       zip.file(a.relPath, a.file);
       a.written = true;
@@ -932,6 +1109,17 @@ ${entitiesHtml}    </a-scene>
     if (f) loadMindFile(f);
   });
 
+  if (el.srcInput) {
+    el.srcInput.addEventListener('change', function () {
+      if (el.srcInput.files && el.srcInput.files.length) {
+        stageSourceImages(el.srcInput.files);
+        el.srcInput.value = '';
+      }
+    });
+  }
+  if (el.btnCompile) el.btnCompile.addEventListener('click', compileSourceImages);
+  if (el.btnDownloadMind) el.btnDownloadMind.addEventListener('click', downloadCompiledMind);
+
   document.getElementById('ref-input').addEventListener('change', function () {
     const files = Array.from(this.files || []);
     if (!files.length) return;
@@ -961,6 +1149,7 @@ ${entitiesHtml}    </a-scene>
   renderTargets();
   renderAssets();
   renderPairings();
+  updateCompileButtons();
 
   (async function boot() {
     await tryAutoLoadMind();

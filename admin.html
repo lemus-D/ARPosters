@@ -32,7 +32,13 @@
         <header class="panel-header">
           <h2>1. Targets</h2>
           <div class="panel-actions">
-            <label class="btn btn-secondary">
+            <label class="btn btn-primary" title="Pick the original poster images you want to use as AR targets">
+              <input id="src-input" type="file" accept="image/*" multiple hidden />
+              Stage target images
+            </label>
+            <button id="btn-compile" class="btn btn-secondary" type="button" disabled title="Compile staged images into targets.mind in your browser">Compile targets.mind</button>
+            <button id="btn-download-mind" class="btn btn-ghost" type="button" disabled title="Download the compiled targets.mind file">Download targets.mind</button>
+            <label class="btn btn-ghost" title="Load an existing targets.mind file (e.g. compiled elsewhere)">
               <input id="mind-input" type="file" accept=".mind" hidden />
               Load targets.mind
             </label>
@@ -43,10 +49,15 @@
           </div>
         </header>
         <p class="hint">
-          Compile your poster images at
-          <a href="https://hiukim.github.io/mind-ar-js-doc/tools/compile" target="_blank" rel="noopener">hiukim.github.io/mind-ar-js-doc/tools/compile</a>,
-          then load the <code>targets.mind</code> file here. Numbered previews will appear below so you can pair them with display assets.
+          Stage your poster images and click <strong>Compile targets.mind</strong> &mdash; everything runs in your browser, no upload required.
+          The compiled file is also bundled into the export when you save. As an alternative, you can compile externally at
+          <a href="https://hiukim.github.io/mind-ar-js-doc/tools/compile" target="_blank" rel="noopener">hiukim.github.io/mind-ar-js-doc/tools/compile</a>
+          and use <em>Load targets.mind</em>.
         </p>
+        <div id="compile-progress" class="compile-progress hidden" role="status" aria-live="polite">
+          <div class="compile-progress-bar"><span></span></div>
+          <span class="compile-progress-label">Compiling&hellip; 0%</span>
+        </div>
         <div id="targets-grid" class="grid grid-targets">
           <div class="empty-state">No targets loaded yet.</div>
         </div>

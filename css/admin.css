@@ -108,6 +108,41 @@ code { background: #0a0c10; padding: 1px 5px; border-radius: 3px; font-size: 0.9
 .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .hint { color: var(--muted); margin: 0 0 14px 0; font-size: 0.88rem; }
 
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled]:hover { background: var(--panel-2); border-color: var(--border); }
+
+.compile-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px 0;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.compile-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #0a0c10;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.compile-progress-bar > span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+  transition: width 0.2s ease;
+}
+.compile-progress-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  min-width: 130px;
+  text-align: right;
+}
+
 .grid {
   display: grid;
   gap: 12px;

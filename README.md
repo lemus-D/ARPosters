@@ -9,39 +9,36 @@ This folder is a drop-in companion to the sibling `EELabDemos/` and `SN020/` exa
 ## How it works
 
 ```
-hiukim compile page -->  targets.mind
-                               |
-          admin.html  <--------+
-             |                   (reads pairings, sizes, flags)
-             v
-        config.json  ----> index.html --> MindAR + A-Frame scene
-             ^
-             |
-      assets/images/, assets/videos/, assets/models/
+poster images (jpg/png) -->  admin.html (in-browser MindAR compile)
+                                       |
+                                       +--> targets.mind
+                                       +--> config.json
+                                       +--> index.html (regenerated)
+                                       +--> assets/images|videos|models/
+
+         index.html  --> MindAR + A-Frame scene (static, no fetches)
 ```
 
-- `targets.mind` is compiled **once** on the external MindAR tool and dropped into this folder.
-- `admin.html` decodes `targets.mind` entirely in the browser, shows a numbered thumbnail for each target, and lets you pair them with your uploaded display assets plus per-pairing position / rotation / scale / plane-size / flags.
-- The admin writes everything (or emits a zip) so you can commit **`config.json` + `targets.mind` + `assets/`**.
-- `index.html` fetches `config.json` at runtime and programmatically builds the A-Frame scene. End users never edit HTML.
+- `admin.html` runs MindAR's compiler **entirely in your browser** to turn your poster images into `targets.mind` — no upload to any external tool needed.
+- It also lets you pair each target with display assets (images, videos, glb/gltf models) plus per-pairing position / rotation / scale / plane-size / flags.
+- Save & Generate Viewer produces a self-contained `index.html` plus `config.json` (and `targets.mind` + assets when present), bundled as a zip if any binary content is included.
+- Commit the resulting files and push — GitHub Pages serves the AR experience immediately.
 
 ---
 
 ## First-time setup
 
 1. **Clone or fork** this repo.
-2. **Enable GitHub Pages** on the repo: Settings -> Pages -> Source = *Deploy from a branch* = `main` (root). Your URL will be `https://<user>.github.io/<repo>/AR_Poster/`.
-3. **Compile your targets**:
-   - Go to <https://hiukim.github.io/mind-ar-js-doc/tools/compile>.
-   - Drag in every poster image, **taking note of the order you upload them** (this determines `targetIndex`). The admin will also show you previews so you can verify visually.
-   - Click Start, wait for it to finish, click Download. Save the file as `AR_Poster/targets.mind`.
+2. **Enable GitHub Pages** on the repo: Settings -> Pages -> Source = *Deploy from a branch* = `main` (root). Your URL will be `https://<user>.github.io/<repo>/AR_Poster/` (or just `https://<user>.github.io/<repo>/` if `AR_Poster` is your repo root).
 
 ## Each time you build a new experience
 
-1. Open `AR_Poster/admin.html` (locally via `file://`, or visit the deployed `/admin.html`). Chromium browsers (Chrome / Edge / Arc) give you the best experience via the File System Access API — click **Connect repo folder** and pick `AR_Poster/` so uploads write directly to disk.
-2. **Load `targets.mind`** (or it will auto-load if you're viewing the deployed site). A numbered thumbnail appears for each target.
-3. **Upload display assets** (images, mp4 / webm videos, or glb / gltf models). They're staged in the gallery.
-4. **Pair each asset to a target** by drag-and-drop onto the target card or via the dropdown on the card. Each new pairing appears in the pairings list with a transform editor:
+1. Open `AR_Poster/admin.html` (locally via a static file server such as `npx serve`, or visit the deployed `/admin.html`).
+2. **Stage target images** — click the blue button and pick every poster image you want recognised. The order you pick them determines each `targetIndex`.
+3. **Click Compile targets.mind**. Watch the progress bar; on a typical laptop a 4-image batch takes 10–60 seconds. The compiled `.mind` is stored in your browser, and your source images double as reference previews on each target card.
+4. *(Optional)* **Download targets.mind** if you want a copy on disk before saving.
+5. **Upload display assets** (images, mp4 / webm videos, or glb / gltf models). They're staged in the gallery.
+6. **Pair each asset to a target** by drag-and-drop onto the target card or via the dropdown on the card. Each new pairing appears in the pairings list with a transform editor:
    - `position` x/y/z (meters, 0 = aligned to the target center).
    - `rotation` x/y/z (degrees).
    - `scale` x/y/z.
@@ -49,17 +46,21 @@ hiukim compile page -->  targets.mind
    - Image-only: **Tap to enlarge** — reuses the full-screen popup from the existing examples.
    - Video-only: loop, autoplay, muted.
    - A mini preview shows the overlay sized against the actual target thumbnail.
-5. Tune the scene options in the footer (`maxTrack`, `filterMinCF`, `warmupTolerance`) if needed. Defaults match `EELabDemos/index.html`.
-6. **Click Save**:
-   - If you connected the repo folder, `config.json` and all assets are written directly into `AR_Poster/`.
-   - Otherwise you get a download (`config.json` by itself, or `AR_Poster-payload.zip` containing `config.json` + `assets/...`). Unzip into `AR_Poster/`.
-7. Commit and push:
+7. Tune the scene options in the footer (`maxTrack`, `filterMinCF`, `warmupTolerance`) if needed. Defaults match `EELabDemos/index.html`.
+8. **Click Save & Generate Viewer**. You get either:
+   - `index.html` + `config.json` as two downloads (when nothing binary is staged), or
+   - `AR_Poster-export.zip` containing `index.html`, `config.json`, `targets.mind`, and any new assets.
+9. Drop the downloaded files into your local `AR_Poster/` folder, then commit and push:
    ```bash
-   git add AR_Poster/config.json AR_Poster/targets.mind AR_Poster/assets
+   git add AR_Poster/index.html AR_Poster/config.json AR_Poster/targets.mind AR_Poster/assets
    git commit -m "Update AR poster content"
    git push
    ```
-8. Wait ~30s for Pages to deploy. Your QR code URL (pointing at `AR_Poster/index.html`) now serves the new experience.
+10. Wait ~30s for Pages to deploy. Your QR code URL (pointing at `AR_Poster/index.html`) now serves the new experience.
+
+### Alternative: use the external compiler
+
+If you'd rather compile elsewhere (e.g. a teammate did it for you), drop their `targets.mind` next to `admin.html` and click **Load targets.mind** instead of staging images. You can also compile at <https://hiukim.github.io/mind-ar-js-doc/tools/compile> and load the result here.
 
 ## Iterating later
 
@@ -76,7 +77,7 @@ AR_Poster/
 ├── index.html              viewer (reads config.json, builds scene)
 ├── admin.html              dashboard GUI
 ├── config.json             produced by admin.html (commit this)
-├── targets.mind            produced by hiukim compile tool (commit this)
+├── targets.mind            produced by admin.html in-browser compile (commit this)
 ├── js/
 │   ├── viewer.js
 │   └── admin.js
@@ -136,12 +137,12 @@ AR_Poster/
 
 ## Compatibility
 
-| Feature                        | Chromium (Chrome/Edge/Arc) | Firefox | Safari |
-|--------------------------------|:--------------------------:|:-------:|:------:|
-| Viewer (`index.html`)          | yes                        | yes     | yes*   |
-| Admin decode + pairings        | yes                        | yes     | yes    |
-| Direct-write to repo folder    | yes                        | no      | no     |
-| Zip-download fallback          | yes                        | yes     | yes    |
+| Feature                                  | Chromium (Chrome/Edge/Arc) | Firefox | Safari |
+|------------------------------------------|:--------------------------:|:-------:|:------:|
+| Viewer (`index.html`)                    | yes                        | yes     | yes*   |
+| Admin decode + pairings                  | yes                        | yes     | yes    |
+| In-browser MindAR compile                | yes                        | yes     | yes    |
+| Save / generate viewer (downloads)       | yes                        | yes     | yes    |
 
 \* iOS Safari requires HTTPS (GitHub Pages is HTTPS) and a user tap to start camera.
 
@@ -149,7 +150,8 @@ AR_Poster/
 
 - **"Could not load config.json"** on the viewer — `config.json` is missing or invalid JSON. Open the admin, pair at least one target, and Save.
 - **"No pairings configured yet"** — config loaded but empty. Add pairings and save.
-- **Thumbnails don't appear** — your `.mind` file may be from a much older MindAR version. Re-compile it on the current hiukim tool.
+- **Thumbnails don't appear** — your `.mind` file may be from an older MindAR version, or you loaded a `.mind` without staging the matching source images. Re-stage the originals and click Compile, or click a target card to attach a reference image manually.
+- **Compile is slow / freezes the tab** — MindAR's compiler is CPU-bound. Stick to ≤8 high-contrast images per batch on mobile, or do the compile on a laptop and just commit the resulting `targets.mind`.
 - **Overlay is the wrong size** — tweak `planeSize` on the pairing; width/height are in the same normalized units MindAR uses (the larger side of the target image is ~1 unit).
 - **3D model is invisible** — set a larger `scale` (models are in meters, unlike planes). Also confirm the `.glb` includes embedded textures.
 
